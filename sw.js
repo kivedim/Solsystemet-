@@ -1,5 +1,5 @@
 const CACHE='solsystemet-v1';
-const CORE=['./','./index.html','./manifest.json','./icons/icon-192.png','./icons/icon-512.png',
+const CORE=['./','./index.html','./manifest.json','./icon-192.png','./icon-512.png',
 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));});
