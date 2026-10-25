@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="sv">
+<html lang="sv" data-version="1.1">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -56,6 +56,10 @@ body{background:var(--void);color:var(--ink);font-family:var(--font-body);overfl
 .chip i{width:10px;height:10px;border-radius:50%;display:inline-block;}
 .chip[aria-pressed="true"]{border-color:var(--sol);color:var(--sol);}
 .loading{position:fixed;inset:0;display:grid;place-items:center;font:500 15px var(--font-display);letter-spacing:.08em;color:var(--ink-dim);pointer-events:none;transition:opacity .5s;}
+.lang{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:none;}
+.lang button{height:38px;min-width:38px;padding:0 8px;border:0;background:transparent;color:var(--ink-dim);font:700 13px/1 var(--font-display);letter-spacing:.06em;cursor:pointer;}
+.lang button[aria-pressed="true"]{background:var(--sol);color:var(--void);}
+@media (max-width:440px){.top h1{display:none;}.top{padding-left:10px;gap:8px;}}
 button:focus-visible,a:focus-visible{outline:2px solid var(--sol);outline-offset:2px;}
 </style>
 </head>
@@ -65,11 +69,14 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--sol);outline-offset
 <div class="loading" id="loading">Målar planeterna…</div>
 <div class="ui">
   <div class="top">
-    <h1>Solsystemet</h1>
-    <label for="speed">Fart</label>
+    <h1 id="ttl">Solsystemet</h1>
+    <label for="speed" id="speedLbl">Fart</label>
     <input type="range" id="speed" min="0" max="100" step="1" value="18">
     <button class="ibtn" id="pause" aria-label="Pausa">⏸</button>
     <button class="ibtn" id="home" aria-label="Visa hela solsystemet">⌂</button>
+    <div class="lang" role="group" aria-label="Språk / Language">
+      <button id="lang-sv" aria-pressed="true">SV</button><button id="lang-en" aria-pressed="false">EN</button>
+    </div>
   </div>
   <div class="bottom">
     <div class="hint" id="hint">Dra för att snurra · Nyp för att zooma · Tryck på en planet</div>
@@ -219,6 +226,61 @@ const BODIES=[
   url:'https://science.nasa.gov/dwarf-planets/eris/'}
 ];
 
+const EN={
+ sun:{name:'Sun',kind:'Star',lead:'The Sun is a star, a gigantic ball of hot gas. It holds almost all the mass in the solar system and keeps the planets in their orbits.',
+  facts:[['Diameter','1,392,700 km'],['Surface temperature','about 5,500 °C'],['Core temperature','about 15 million °C'],['Age','about 4.6 billion years']],
+  fun:'About 1.3 million Earths would fit inside the Sun. Its light takes just over 8 minutes to reach Earth.'},
+ mercury:{name:'Mercury',kind:'Rocky planet',lead:'The smallest planet and the closest to the Sun. Its surface is covered in craters, a lot like the Moon.',
+  facts:[['Diameter','4,879 km'],['Distance from the Sun','58 million km'],['One year','88 days'],['One day (sunrise to sunrise)','176 days'],['Moons','0'],['Temperature','−180 to 430 °C']],
+  fun:'Even though it is closest to the Sun, it is not the hottest. It has no atmosphere to trap heat, so the nights get freezing cold.'},
+ venus:{name:'Venus',kind:'Rocky planet',lead:'Almost as big as Earth, but covered in thick clouds of sulfuric acid. Under the clouds it is hotter than a pizza oven.',
+  facts:[['Diameter','12,104 km'],['Distance from the Sun','108 million km'],['One year','225 days'],['One spin','243 days'],['Moons','0'],['Temperature','about 465 °C']],
+  fun:'Venus spins backwards compared with most planets. There, the Sun would rise in the west.'},
+ earth:{name:'Earth',kind:'Rocky planet',lead:'Our home and the only planet where we know there is life. About 71 percent of the surface is covered by water.',
+  facts:[['Diameter','12,742 km'],['Distance from the Sun','150 million km'],['One year','365 days'],['One day','24 hours'],['Moons','1'],['Average temperature','about 15 °C']],
+  fun:'Earth’s axis is tilted 23.4 degrees. That is why we have summer and winter.'},
+ mars:{name:'Mars',kind:'Rocky planet',lead:'The red planet. The color comes from iron oxide, which is rust, in the sand. There is ice at the poles.',
+  facts:[['Diameter','6,779 km'],['Distance from the Sun','228 million km'],['One year','687 days'],['One day','24 h 37 min'],['Moons','2 (Phobos, Deimos)'],['Average temperature','about −60 °C']],
+  fun:'Olympus Mons on Mars is the tallest volcano in the solar system, almost three times as high as Mount Everest.'},
+ jupiter:{name:'Jupiter',kind:'Gas giant',lead:'The biggest planet. It is mostly hydrogen and helium and has no solid surface to stand on.',
+  facts:[['Diameter','139,820 km'],['Distance from the Sun','778 million km'],['One year','12 years'],['One day','about 10 hours'],['Moons','more than 90'],['Cloud-top temperature','about −110 °C']],
+  fun:'The Great Red Spot is a storm bigger than the whole Earth. It has been raging for at least 350 years.'},
+ saturn:{name:'Saturn',kind:'Gas giant',lead:'The planet with the most famous rings. They are made of billions of pieces of ice and rock, from dust grains to blocks the size of houses.',
+  facts:[['Diameter','116,460 km'],['Distance from the Sun','1.4 billion km'],['One year','29 years'],['One day','about 10.7 hours'],['Moons','more than 270'],['Temperature','about −140 °C']],
+  fun:'The rings are about 280,000 km wide but mostly only around 10 meters thick. Saturn is so light for its size that it would float in a big enough bathtub.'},
+ uranus:{name:'Uranus',kind:'Ice giant',lead:'An ice giant lying on its side. The blue-green color comes from methane gas in the atmosphere.',
+  facts:[['Diameter','50,724 km'],['Distance from the Sun','2.9 billion km'],['One year','84 years'],['One day','about 17 hours'],['Moons','28'],['Temperature','about −195 °C']],
+  fun:'Because it lies on its side, each pole gets 42 years of sunlight in a row, then 42 years of darkness.'},
+ neptune:{name:'Neptune',kind:'Ice giant',lead:'The planet farthest away. Dark blue, cold, and with the fastest winds in the solar system.',
+  facts:[['Diameter','49,244 km'],['Distance from the Sun','4.5 billion km'],['One year','165 years'],['One day','about 16 hours'],['Moons','16'],['Temperature','about −200 °C']],
+  fun:'Winds can blow at over 2,000 km/h. Neptune was found using math before anyone saw it through a telescope.'},
+ pluto:{name:'Pluto',kind:'Dwarf planet',lead:'Counted as a planet until 2006 and now a dwarf planet. The bright heart-shaped plain is made of nitrogen ice.',
+  facts:[['Diameter','2,377 km'],['Distance from the Sun','4.4–7.4 billion km'],['One year','248 years'],['One day','6.4 days'],['Moons','5'],['Temperature','about −230 °C']],
+  fun:'Its orbit is tilted 17 degrees and so stretched that Pluto is sometimes closer to the Sun than Neptune. Drag to a side view to see the tilt.'},
+ ceres:{name:'Ceres',kind:'Dwarf planet',lead:'The only dwarf planet in the asteroid belt, between Mars and Jupiter. It is the biggest object there and makes up about a quarter of the belt’s total mass.',
+  facts:[['Diameter','about 940 km'],['Distance from the Sun','about 414 million km'],['One year','4.6 years'],['One day','about 9 hours'],['Moons','0'],['Temperature','about −105 °C']],
+  fun:'The bright spots in the crater Occator are salt that seeped up from salty water under the surface. The Dawn spacecraft orbited Ceres from 2015 to 2018.'},
+ haumea:{name:'Haumea',kind:'Dwarf planet',lead:'A stretched-out dwarf planet far out in the Kuiper Belt, shaped roughly like a flattened rugby ball. Its surface is covered in shiny water ice.',
+  facts:[['Size','about 2,300 × 1,000 km'],['Distance from the Sun','5.2–7.7 billion km'],['One year','about 284 years'],['One day','about 3.9 hours'],['Moons','2 (Hiʻiaka, Namaka)'],['Temperature','about −240 °C']],
+  fun:'Haumea spins once in under four hours, so fast that it has been stretched out. It also has a ring, discovered in 2017.'},
+ makemake:{name:'Makemake',kind:'Dwarf planet',lead:'A reddish-brown dwarf planet in the Kuiper Belt. The color comes from frozen methane changed by sunlight over a very long time.',
+  facts:[['Diameter','about 1,430 km'],['Distance from the Sun','5.7–7.9 billion km'],['One year','about 306 years'],['One day','about 23 hours'],['Moons','1'],['Temperature','about −240 °C']],
+  fun:'It was discovered just after Easter 2005 and named after a creator god from Easter Island.'},
+ eris:{name:'Eris',kind:'Dwarf planet',lead:'Almost exactly the same size as Pluto but heavier. Its orbit is very stretched and tilted, and it is usually much farther away than Pluto.',
+  facts:[['Diameter','about 2,330 km'],['Distance from the Sun','5.7–14.6 billion km'],['One year','about 559 years'],['One day','about 16 days'],['Moons','1 (Dysnomia)'],['Temperature','about −240 °C']],
+  fun:'Finding Eris in 2005 made astronomers define what a planet is. As a result, Pluto became a dwarf planet in 2006. Its orbit is tilted a whole 44 degrees.'}
+};
+const STR={
+ sv:{title:'Solsystemet',speed:'Fart',pause:'Pausa',play:'Spela',home:'Visa hela solsystemet',hint:'Dra för att snurra · Nyp för att zooma · Tryck på en planet',
+  painting:'Målar',nasa:'Riktiga bilder hos NASA ↗',back:'Hela solsystemet',chips:'Välj himlakropp'},
+ en:{title:'Solar System',speed:'Speed',pause:'Pause',play:'Play',home:'Show the whole solar system',hint:'Drag to spin · Pinch to zoom · Tap a planet',
+  painting:'Painting',nasa:'Real photos from NASA ↗',back:'Whole solar system',chips:'Choose a body'}
+};
+let lang='sv';
+try{const s=localStorage.getItem('lang');lang=s||(/^en/i.test(navigator.language||'')?'en':'sv');}catch(e){lang=/^en/i.test(navigator.language||'')?'en':'sv';}
+const L=(b,k)=>lang==='en'&&EN[b.id]?EN[b.id][k]:b[k];
+const S=k=>STR[lang][k];
+
 const canvas=document.getElementById('scene');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
@@ -277,12 +339,12 @@ const moon=new THREE.Mesh(new THREE.SphereGeometry(earth.r*.27,32,16),new THREE.
 const labelsEl=document.getElementById('labels');
 BODIES.forEach(b=>{const d=document.createElement('div');d.className='lbl';d.textContent=b.name;labelsEl.append(d);b.lbl=d;});
 
-const jobs=[['sun','Solen'],['earth','Jorden'],['earthSpec',null],['clouds',null],['jupiter','Jupiter'],['saturn','Saturnus'],['mars','Mars'],['venus','Venus'],['mercury','Merkurius'],['moon',null],['uranus','Uranus'],['neptune','Neptunus'],['pluto','Pluto'],['ceres','Ceres'],['haumea','Haumea'],['makemake','Makemake'],['eris','Eris']];
+const jobs=['sun','earth','earthSpec','clouds','jupiter','saturn','mars','venus','mercury','moon','uranus','neptune','pluto','ceres','haumea','makemake','eris'].map(k=>[k,BODIES.find(b=>b.tex===k)]);
 const loadingEl=document.getElementById('loading');
 function tex(cv){const t=new THREE.CanvasTexture(cv);t.anisotropy=renderer.capabilities.getMaxAnisotropy();return t;}
 function runJobs(){
   if(!jobs.length){loadingEl.style.opacity=0;return;}
-  const [k,label]=jobs.shift();if(label)loadingEl.textContent='Målar '+label+'…';
+  const [k,body]=jobs.shift();if(body)loadingEl.textContent=S('painting')+' '+L(body,'name')+'…';
   setTimeout(()=>{const cv=TEX[k]();
     if(k==='earthSpec'){earth.mat.specularMap=tex(cv);earth.mat.specular.set(0x8899aa);earth.mat.needsUpdate=true;}
     else if(k==='clouds'){earth.clouds.material.map=tex(cv);earth.clouds.material.opacity=.95;earth.clouds.material.needsUpdate=true;}
@@ -293,19 +355,19 @@ function runJobs(){
 
 const chipsEl=document.getElementById('chips'),cardEl=document.getElementById('card'),hintEl=document.getElementById('hint');
 BODIES.forEach(b=>{const c=document.createElement('button');c.className='chip';c.setAttribute('aria-pressed','false');
-  const dot=document.createElement('i');dot.style.background=b.color;c.append(dot,document.createTextNode(b.name));c.onclick=()=>focusOn(b);chipsEl.append(c);b.chip=c;});
+  const dot=document.createElement('i');dot.style.background=b.color;b.chipTxt=document.createTextNode(b.name);c.append(dot,b.chipTxt);c.onclick=()=>focusOn(b);chipsEl.append(c);b.chip=c;});
 
 function renderCard(b){
   cardEl.innerHTML='';
-  const k=document.createElement('p');k.className='kind';k.textContent=b.kind;
-  const h=document.createElement('h2');h.textContent=b.name;
-  const l=document.createElement('p');l.className='lead';l.textContent=b.lead;
+  const k=document.createElement('p');k.className='kind';k.textContent=L(b,'kind');
+  const h=document.createElement('h2');h.textContent=L(b,'name');
+  const l=document.createElement('p');l.className='lead';l.textContent=L(b,'lead');
   const dl=document.createElement('dl');dl.className='facts';
-  b.facts.forEach(([t,v])=>{const d=document.createElement('div');const dt=document.createElement('dt');dt.textContent=t;const dd=document.createElement('dd');dd.textContent=v;d.append(dt,dd);dl.append(d);});
-  const f=document.createElement('p');f.className='fun';f.textContent=b.fun;
+  L(b,'facts').forEach(([t,v])=>{const d=document.createElement('div');const dt=document.createElement('dt');dt.textContent=t;const dd=document.createElement('dd');dd.textContent=v;d.append(dt,dd);dl.append(d);});
+  const f=document.createElement('p');f.className='fun';f.textContent=L(b,'fun');
   const act=document.createElement('div');act.className='actions';
-  const a=document.createElement('a');a.href=b.url;a.target='_blank';a.rel='noopener';a.textContent='Riktiga bilder hos NASA ↗';
-  const back=document.createElement('button');back.textContent='Hela solsystemet';back.onclick=overview;
+  const a=document.createElement('a');a.href=b.url;a.target='_blank';a.rel='noopener';a.textContent=S('nasa');
+  const back=document.createElement('button');back.textContent=S('back');back.onclick=overview;
   act.append(a,back);cardEl.append(k,h,l,dl,f,act);cardEl.hidden=false;cardEl.scrollTop=0;
 }
 
@@ -350,7 +412,7 @@ addEventListener('resize',resize);resize();
 
 let simT=0,speed=0,paused=false,last=performance.now()/1000;
 const sp=document.getElementById('speed');const setSpeed=()=>{const v=+sp.value/100;speed=v*v*2.2;};sp.oninput=setSpeed;setSpeed();
-const pb=document.getElementById('pause');pb.onclick=()=>{paused=!paused;pb.textContent=paused?'▶':'⏸';pb.setAttribute('aria-label',paused?'Spela':'Pausa');};
+const pb=document.getElementById('pause');pb.onclick=()=>{paused=!paused;pb.textContent=paused?'▶':'⏸';pb.setAttribute('aria-label',S(paused?'play':'pause'));};
 const ease=k=>k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;
 
 function frame(){
@@ -374,6 +436,17 @@ function frame(){
     b.lbl.style.opacity=focus===b?0:1;});
   requestAnimationFrame(frame);
 }
+function applyLang(){
+  document.documentElement.lang=lang;document.title=lang==='en'?'Solar System in 3D':'Solsystemet i 3D';
+  document.getElementById('ttl').textContent=S('title');document.getElementById('speedLbl').textContent=S('speed');
+  hintEl.textContent=S('hint');chipsEl.setAttribute('aria-label',S('chips'));
+  document.getElementById('home').setAttribute('aria-label',S('home'));pb.setAttribute('aria-label',S(paused?'play':'pause'));
+  BODIES.forEach(b=>{const n=L(b,'name');b.lbl.textContent=n;b.chipTxt.textContent=n;});
+  document.getElementById('lang-sv').setAttribute('aria-pressed',lang==='sv');document.getElementById('lang-en').setAttribute('aria-pressed',lang==='en');
+  if(focus)renderCard(focus);
+}
+['sv','en'].forEach(l=>document.getElementById('lang-'+l).onclick=()=>{lang=l;try{localStorage.setItem('lang',l);}catch(e){}applyLang();});
+applyLang();
 requestAnimationFrame(frame);runJobs();
 </script>
 <script>
