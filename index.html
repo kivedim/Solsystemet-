@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solsystemet i 3D</title>
+<meta name="description" content="Utforska solen, planeterna och dvärgplaneterna i 3D.">
+<meta name="theme-color" content="#05060d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Solsystemet">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* Layout: full-screen WebGL scene; thin control strip on top; info card + planet chips docked at the bottom */
+:root{
+  --void:#05060d; --panel:rgba(14,17,32,.86); --line:rgba(160,175,230,.18);
+  --ink:#eef1ff; --ink-dim:#9aa3c7; --sol:#ffb547; --link:#8fb4ff;
+  --font-display:"Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;}
+body{background:var(--void);color:var(--ink);font-family:var(--font-body);overflow:hidden;-webkit-tap-highlight-color:transparent;}
+#scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+.labels{position:fixed;inset:0;pointer-events:none;overflow:hidden;}
+.lbl{position:absolute;left:0;top:0;font:500 12px/1 var(--font-display);letter-spacing:.06em;color:var(--ink-dim);white-space:nowrap;text-shadow:0 1px 3px #000;transform:translate(-50%,0);}
+.ui{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;
+  padding-left:max(12px, env(safe-area-inset-left, 0px));padding-right:max(12px, env(safe-area-inset-right, 0px));padding-block:calc(env(safe-area-inset-top, 0px) + 10px) calc(env(safe-area-inset-bottom, 0px) + 10px);}
+.ui > *{pointer-events:auto;}
+.top{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 8px 6px 14px;backdrop-filter:blur(6px);align-self:stretch;max-width:560px;}
+.top h1{font:700 17px/1 var(--font-display);letter-spacing:.04em;margin:0;flex:none;}
+.top label{font-size:12px;color:var(--ink-dim);margin-left:auto;}
+.top input[type=range]{flex:1;min-width:60px;max-width:180px;accent-color:var(--sol);}
+.ibtn{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:16px;cursor:pointer;flex:none;}
+.bottom{display:flex;flex-direction:column;gap:8px;max-width:560px;width:100%;align-self:center;}
+.hint{align-self:center;font-size:13px;color:var(--ink-dim);background:var(--panel);padding:6px 12px;border-radius:999px;transition:opacity .6s;text-align:center;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;backdrop-filter:blur(8px);max-height:44vh;overflow-y:auto;}
+.card h2{font:700 30px/1 var(--font-display);letter-spacing:.02em;margin:0;text-wrap:balance;}
+.card .kind{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--sol);margin:0 0 4px;}
+.card .lead{margin:8px 0 12px;font-size:15px;line-height:1.5;color:var(--ink);}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:0 0 12px;}
+.facts div{border-top:1px solid var(--line);padding-top:6px;min-width:0;}
+.facts dt{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);}
+.facts dd{margin:2px 0 0;font:500 16px/1.25 var(--font-display);font-variant-numeric:tabular-nums;}
+.fun{font-size:14px;line-height:1.5;color:var(--ink-dim);margin:0 0 12px;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;}
+.actions a,.actions button{flex:1;min-width:140px;text-align:center;font:500 14px/1 var(--font-body);padding:12px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);text-decoration:none;cursor:pointer;}
+.actions a{color:var(--link);}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+.chips::-webkit-scrollbar{display:none;}
+.chip{flex:none;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:500 14px/1 var(--font-display);letter-spacing:.03em;cursor:pointer;}
+.chip i{width:10px;height:10px;border-radius:50%;display:inline-block;}
+.chip[aria-pressed="true"]{border-color:var(--sol);color:var(--sol);}
+.loading{position:fixed;inset:0;display:grid;place-items:center;font:500 15px var(--font-display);letter-spacing:.08em;color:var(--ink-dim);pointer-events:none;transition:opacity .5s;}
+button:focus-visible,a:focus-visible{outline:2px solid var(--sol);outline-offset:2px;}
+</style>
+</head>
+<body>
+<canvas id="scene" aria-label="3D-modell av solsystemet"></canvas>
+<div class="labels" id="labels"></div>
+<div class="loading" id="loading">Målar planeterna…</div>
+<div class="ui">
+  <div class="top">
+    <h1>Solsystemet</h1>
+    <label for="speed">Fart</label>
+    <input type="range" id="speed" min="0" max="100" step="1" value="18">
+    <button class="ibtn" id="pause" aria-label="Pausa">⏸</button>
+    <button class="ibtn" id="home" aria-label="Visa hela solsystemet">⌂</button>
+  </div>
+  <div class="bottom">
+    <div class="hint" id="hint">Dra för att snurra · Nyp för att zooma · Tryck på en planet</div>
+    <section class="card" id="card" hidden aria-live="polite"></section>
+    <nav class="chips" id="chips" aria-label="Välj himlakropp"></nav>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const rad=Math.PI/180, TAU=Math.PI*2;
+function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const rand=mulberry(7);
+const PERM=new Uint8Array(512);{const p=[...Array(256).keys()];for(let i=255;i>0;i--){const j=Math.floor(rand()*(i+1));[p[i],p[j]]=[p[j],p[i]];}for(let i=0;i<512;i++)PERM[i]=p[i&255];}
+function h3(x,y,z){return PERM[PERM[PERM[x&255]+(y&255)]+(z&255)]/255;}
+function noise(x,y,z){const X=Math.floor(x),Y=Math.floor(y),Z=Math.floor(z),fx=x-X,fy=y-Y,fz=z-Z;
+  const u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy),w=fz*fz*(3-2*fz);
+  const a=h3(X,Y,Z),b=h3(X+1,Y,Z),c=h3(X,Y+1,Z),d=h3(X+1,Y+1,Z),e=h3(X,Y,Z+1),f=h3(X+1,Y,Z+1),g=h3(X,Y+1,Z+1),k=h3(X+1,Y+1,Z+1);
+  const l1=a+(b-a)*u,l2=c+(d-c)*u,l3=e+(f-e)*u,l4=g+(k-g)*u;const m1=l1+(l2-l1)*v,m2=l3+(l4-l3)*v;return m1+(m2-m1)*w;}
+function fbm(x,y,z,o){let s=0,a=.5,f=1,n=0;for(let i=0;i<o;i++){s+=a*noise(x*f+i*17.1,y*f,z*f);n+=a;a*=.5;f*=2.03;}return s/n;}
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const sm=(a,b,v)=>{const t=clamp((v-a)/(b-a));return t*t*(3-2*t);};
+const mix=(c1,c2,t)=>[c1[0]+(c2[0]-c1[0])*t,c1[1]+(c2[1]-c1[1])*t,c1[2]+(c2[2]-c1[2])*t];
+const dlon=(a,b)=>((a-b+540)%360)-180;
+
+function genTex(w,h,fn,alpha){
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d');const img=cx.createImageData(w,h),D=img.data;
+  for(let j=0;j<h;j++){const lat=(.5-(j+.5)/h)*Math.PI,cl=Math.cos(lat),y=Math.sin(lat),latD=lat/rad;
+    for(let i=0;i<w;i++){const lon=(i+.5)/w*TAU-Math.PI,x=cl*Math.cos(lon),z=cl*Math.sin(lon);const c=fn(x,y,z,latD,lon/rad,j*w+i);const p=(j*w+i)*4;
+      D[p]=c[0];D[p+1]=c[1];D[p+2]=c[2];D[p+3]=alpha?c[3]:255;}}
+  cx.putImageData(img,0,0);return cv;}
+function craters(cv,n,dark){const cx=cv.getContext('2d'),w=cv.width,h=cv.height;
+  for(let k=0;k<n;k++){const lat=(rand()*2-1)*62,x=rand()*w,y=(.5-lat/180)*h,r=(2+Math.pow(rand(),3)*w*.03),sx=1/Math.cos(lat*rad);
+    cx.save();cx.translate(x,y);cx.scale(sx,1);const g=cx.createRadialGradient(0,0,0,0,0,r);
+    g.addColorStop(0,`rgba(0,0,0,${dark})`);g.addColorStop(.75,`rgba(0,0,0,${dark*.6})`);g.addColorStop(.9,'rgba(255,255,255,.18)');g.addColorStop(1,'rgba(255,255,255,0)');
+    cx.fillStyle=g;cx.beginPath();cx.arc(0,0,r,0,TAU);cx.fill();cx.restore();}return cv;}
+
+let earthMask;
+const TEX={
+ sun:()=>genTex(512,256,(x,y,z)=>{const n=fbm(x*9,y*9,z*9,5);return mix([235,120,20],[255,224,130],n*1.2-.1).map(v=>clamp(v,0,255));}),
+ mercury:()=>craters(genTex(512,256,(x,y,z)=>{const n=fbm(x*4,y*4,z*4,6);return mix([92,86,80],[188,180,170],n);}),260,.35),
+ venus:()=>genTex(512,256,(x,y,z)=>{const w=fbm(x*2,y*2,z*2,3);const v=fbm(x*3+w*2.2,y*7+w,z*3,5);return mix([206,160,96],[240,214,160],v);}),
+ earth:()=>{earthMask=new Float32Array(1024*512);return genTex(1024,512,(x,y,z,lat,lon,idx)=>{
+   const n=fbm(x*1.7+3,y*1.7,z*1.7,6),m=fbm(x*5,y*5+7,z*5,4),al=Math.abs(lat);
+   if(al>72+(m-.5)*14){earthMask[idx]=0;return[236,242,248];}
+   if(n>.53){earthMask[idx]=0;const dry=clamp(1-Math.abs(al-24)/14)*(m+.2);let c=mix([46,96,44],[88,124,58],m);c=mix(c,[184,156,104],clamp(dry));if(n>.64)c=mix(c,[130,112,96],sm(.64,.72,n));if(al>58)c=mix(c,[110,120,100],.4);return c;}
+   earthMask[idx]=1;return mix([10,34,86],[34,96,160],sm(.36,.53,n));});},
+ earthSpec:()=>genTex(1024,512,(x,y,z,lat,lon,idx)=>{const v=earthMask[idx]?150:8;return[v,v,v];}),
+ clouds:()=>genTex(768,384,(x,y,z,lat)=>{const w=fbm(x*2,y*2,z*2,3);const c=fbm(x*3+w,y*6,z*3+w,5);return[255,255,255,Math.round(sm(.5,.72,c)*235)];},true),
+ moon:()=>craters(genTex(512,256,(x,y,z)=>{const n=fbm(x*4,y*4,z*4,5),m=fbm(x*1.4+9,y*1.4,z*1.4,4);let c=mix([120,118,114],[196,194,188],n);if(m>.55)c=mix(c,[78,78,80],sm(.55,.62,m)*.8);return c;}),180,.25),
+ mars:()=>genTex(512,256,(x,y,z,lat)=>{const n=fbm(x*2.5,y*2.5,z*2.5,6),d=fbm(x*1.6+5,y*1.6,z*1.6,4);let c=mix([150,62,34],[208,110,62],n);if(d>.55)c=mix(c,[92,46,32],sm(.55,.65,d)*.7);if(Math.abs(lat)>76+(n-.5)*12)c=[238,236,232];return c;}),
+ jupiter:()=>genTex(1024,512,(x,y,z,lat,lon)=>{const tq=fbm(x*3,y*3,z*3,4);const b=y+(tq-.5)*.09;const s=Math.sin(b*21)*.5+.5,s2=Math.sin(b*49+1.3)*.5+.5;
+   let c=mix([236,224,200],[194,146,104],s);c=mix(c,[140,88,58],s2*.32);const v=fbm(x*14,y*34,z*14,3);c=c.map(q=>q*(.88+.24*v));
+   const e=Math.pow((lat+22)/6.5,2)+Math.pow(dlon(lon,40)/13,2);if(e<1)c=mix(c,[196,92,62],Math.pow(1-e,.6)*.85);return c;}),
+ saturn:()=>genTex(512,256,(x,y,z)=>{const b=y+(fbm(x*3,y*3,z*3,4)-.5)*.04;const s=Math.sin(b*15)*.5+.5;let c=mix([238,220,170],[204,172,116],s*.7);const v=fbm(x*10,y*30,z*10,3);return c.map(q=>q*(.93+.12*v));}),
+ uranus:()=>genTex(512,256,(x,y,z)=>{const v=fbm(x*3,y*12,z*3,3);return[164,220,226].map(q=>q*(.93+.06*Math.sin(y*9)+.06*v));}),
+ neptune:()=>genTex(512,256,(x,y,z,lat,lon)=>{let c=mix([44,68,176],[70,108,222],Math.sin(y*9)*.5+.5);const f=fbm(x*6,y*22,z*6,3);if(f>.66)c=mix(c,[230,236,255],(f-.66)*2.6);
+   const e=Math.pow((lat+20)/6,2)+Math.pow(dlon(lon,60)/11,2);if(e<1)c=mix(c,[22,30,92],(1-e)*.8);return c;}),
+ pluto:()=>genTex(512,256,(x,y,z,lat,lon)=>{const n=fbm(x*4,y*4,z*4,5);let c=mix([150,112,86],[200,170,140],n);
+   const hd=Math.min(Math.hypot(lat-28,dlon(lon,-12)),Math.hypot(lat-28,dlon(lon,12)),Math.hypot((lat-8)*1.4,dlon(lon,0)*.9));if(hd<20)c=mix(c,[240,230,218],sm(20,12,hd));
+   const dl=dlon(lon,0);if(Math.abs(lat)<18&&(dl>40||dl<-150)&&n>.42)c=mix(c,[86,48,38],.75);return c;}),
+ ceres:()=>{const cv=craters(genTex(512,256,(x,y,z)=>{const n=fbm(x*4,y*4,z*4,5);return mix([70,68,66],[140,136,130],n);}),220,.3);
+   const cx=cv.getContext('2d');[[0.62,0.38,5],[0.625,0.39,2.5],[0.3,0.55,3]].forEach(([u,v,r])=>{const g=cx.createRadialGradient(u*512,v*256,0,u*512,v*256,r);g.addColorStop(0,'rgba(255,255,250,1)');g.addColorStop(1,'rgba(255,255,250,0)');cx.fillStyle=g;cx.beginPath();cx.arc(u*512,v*256,r,0,TAU);cx.fill();});return cv;},
+ haumea:()=>genTex(512,256,(x,y,z,lat,lon)=>{const n=fbm(x*3,y*3,z*3,4);let c=mix([214,212,210],[248,248,250],n);const e=Math.pow(lat/12,2)+Math.pow(dlon(lon,90)/22,2);if(e<1)c=mix(c,[140,70,60],(1-e)*.7);return c;}),
+ makemake:()=>genTex(512,256,(x,y,z)=>{const n=fbm(x*3,y*3,z*3,5),m=fbm(x*7+3,y*7,z*7,3);let c=mix([156,96,70],[214,160,126],n);if(m>.6)c=mix(c,[236,222,206],sm(.6,.7,m)*.6);return c;}),
+ eris:()=>genTex(512,256,(x,y,z)=>{const n=fbm(x*3,y*3,z*3,5);return mix([196,194,190],[244,244,242],n);})
+};
+function ringTex(kind){const cv=document.createElement('canvas');cv.width=512;cv.height=2;const cx=cv.getContext('2d');
+  for(let i=0;i<512;i++){const u=i/511;let a,col;
+    if(kind==='saturn'){a=.55+.4*noise(u*60,0,0)-.15*noise(u*200,3,0);if(u<.08)a*=u/.08;if(u>.58&&u<.64)a=.05;if(u>.9)a*=.6;if(u>.97)a*=(1-u)/.03;col=mix([150,130,100],[232,214,176],noise(u*30,5,0));}
+    else if(kind==='haumea'){a=Math.abs(u-.5)<.18?.45:0;col=[180,180,184];}
+    else{a=(Math.abs(u-.85)<.02||Math.abs(u-.6)<.012)?.55:0;col=[170,190,195];}
+    cx.fillStyle=`rgba(${col.map(Math.round).join(',')},${clamp(a).toFixed(3)})`;cx.fillRect(i,0,1,2);}
+  return cv;}
+
+const BODIES=[
+ {id:'sun',name:'Solen',kind:'Stjärna',Rkm:696340,color:'#ffb547',tex:'sun',
+  lead:'Solen är en stjärna, ett gigantiskt klot av het gas. Den står för nästan all massa i solsystemet och håller planeterna kvar i sina banor.',
+  facts:[['Diameter','1 392 700 km'],['Temperatur, yta','ca 5 500 °C'],['Temperatur, kärna','ca 15 milj °C'],['Ålder','ca 4,6 mdr år']],
+  fun:'Ungefär 1,3 miljoner jordar skulle få plats inuti solen. Ljuset härifrån tar drygt 8 minuter till jorden.',
+  url:'https://science.nasa.gov/sun/'},
+ {id:'mercury',name:'Merkurius',kind:'Stenplanet',Rkm:2440,a:.387,T:.241,tilt:.03,L0:30,spin:.6,color:'#a19d97',tex:'mercury',
+  lead:'Minsta planeten och den som ligger närmast solen. Ytan är full av kratrar, ungefär som månen.',
+  facts:[['Diameter','4 879 km'],['Avstånd till solen','58 milj km'],['Ett år','88 dygn'],['En dag (sol till sol)','176 dygn'],['Månar','0'],['Temperatur','−180 till 430 °C']],
+  fun:'Trots att den ligger närmast solen är den inte varmast. Den saknar atmosfär som håller kvar värmen, så nätterna blir iskalla.',
+  url:'https://science.nasa.gov/mercury/'},
+ {id:'venus',name:'Venus',kind:'Stenplanet',Rkm:6052,a:.723,T:.615,tilt:177,L0:120,spin:-.3,color:'#e3bb7a',tex:'venus',
+  lead:'Nästan lika stor som jorden, men täckt av tjocka moln av svavelsyra. Under molnen är det hetare än i en pizzaugn.',
+  facts:[['Diameter','12 104 km'],['Avstånd till solen','108 milj km'],['Ett år','225 dygn'],['Ett varv runt sig själv','243 dygn'],['Månar','0'],['Temperatur','ca 465 °C']],
+  fun:'Venus snurrar baklänges jämfört med de flesta planeter. Där skulle solen gå upp i väster.',
+  url:'https://science.nasa.gov/venus/'},
+ {id:'earth',name:'Jorden',kind:'Stenplanet',Rkm:6371,a:1,T:1,tilt:23.4,L0:200,spin:.8,color:'#3d7fd0',tex:'earth',
+  lead:'Vårt hem och den enda planet där vi vet att det finns liv. Ungefär 71 procent av ytan är täckt av vatten.',
+  facts:[['Diameter','12 742 km'],['Avstånd till solen','150 milj km'],['Ett år','365 dygn'],['En dag','24 timmar'],['Månar','1'],['Medeltemperatur','ca 15 °C']],
+  fun:'Jordaxeln lutar 23,4 grader. Det är därför vi har sommar och vinter.',
+  url:'https://science.nasa.gov/earth/'},
+ {id:'mars',name:'Mars',kind:'Stenplanet',Rkm:3390,a:1.524,T:1.881,tilt:25.2,L0:300,spin:.75,color:'#c5603a',tex:'mars',
+  lead:'Den röda planeten. Färgen kommer från järnoxid, alltså rost, i sanden. Det finns is vid polerna.',
+  facts:[['Diameter','6 779 km'],['Avstånd till solen','228 milj km'],['Ett år','687 dygn'],['En dag','24 h 37 min'],['Månar','2 (Phobos, Deimos)'],['Medeltemperatur','ca −60 °C']],
+  fun:'Olympus Mons på Mars är solsystemets högsta vulkan, nästan tre gånger så hög som Mount Everest.',
+  url:'https://science.nasa.gov/mars/'},
+ {id:'jupiter',name:'Jupiter',kind:'Gasjätte',Rkm:69911,a:5.203,T:11.86,tilt:3.1,L0:60,spin:1.6,color:'#d4a77a',tex:'jupiter',
+  lead:'Största planeten. Den består mest av väte och helium och har ingen fast yta att stå på.',
+  facts:[['Diameter','139 820 km'],['Avstånd till solen','778 milj km'],['Ett år','12 år'],['En dag','ca 10 timmar'],['Månar','fler än 90'],['Temperatur, molntoppar','ca −110 °C']],
+  fun:'Stora röda fläcken är en storm som är större än hela jorden och har rasat i minst 350 år.',
+  url:'https://science.nasa.gov/jupiter/'},
+ {id:'saturn',name:'Saturnus',kind:'Gasjätte',Rkm:58232,a:9.537,T:29.46,tilt:26.7,L0:200,spin:1.5,color:'#e2c98e',tex:'saturn',ring:{in:1.24,out:2.3,kind:'saturn'},
+  lead:'Planeten med de mest kända ringarna. De består av miljarder bitar av is och sten, från dammkorn till husstora block.',
+  facts:[['Diameter','116 460 km'],['Avstånd till solen','1,4 mdr km'],['Ett år','29 år'],['En dag','ca 10,7 timmar'],['Månar','fler än 270'],['Temperatur','ca −140 °C']],
+  fun:'Ringarna är ungefär 280 000 km breda men oftast bara runt 10 meter tjocka. Saturnus har så låg densitet att den skulle flyta i ett tillräckligt stort badkar.',
+  url:'https://science.nasa.gov/saturn/'},
+ {id:'uranus',name:'Uranus',kind:'Isjätte',Rkm:25362,a:19.19,T:84,tilt:97.8,L0:20,spin:-1.1,color:'#9fdde2',tex:'uranus',ring:{in:1.6,out:2.0,kind:'uranus'},
+  lead:'En isjätte som ligger på sidan. Den blågröna färgen kommer från metangas i atmosfären.',
+  facts:[['Diameter','50 724 km'],['Avstånd till solen','2,9 mdr km'],['Ett år','84 år'],['En dag','ca 17 timmar'],['Månar','28'],['Temperatur','ca −195 °C']],
+  fun:'Eftersom den ligger på sidan har varje pol 42 år av sol i sträck, och sedan 42 år av mörker.',
+  url:'https://science.nasa.gov/uranus/'},
+ {id:'neptune',name:'Neptunus',kind:'Isjätte',Rkm:24622,a:30.07,T:164.8,tilt:28.3,L0:280,spin:1.2,color:'#3f62d6',tex:'neptune',
+  lead:'Planeten längst bort. Mörkblå, kall och med solsystemets snabbaste vindar.',
+  facts:[['Diameter','49 244 km'],['Avstånd till solen','4,5 mdr km'],['Ett år','165 år'],['En dag','ca 16 timmar'],['Månar','16'],['Temperatur','ca −200 °C']],
+  fun:'Vindarna kan blåsa över 2 000 km/h. Neptunus hittades med matematik innan någon såg den i teleskop.',
+  url:'https://science.nasa.gov/neptune/'},
+ {id:'pluto',name:'Pluto',kind:'Dvärgplanet',Rkm:1188,a:39.48,e:.2488,inc:17.16,node:110,peri:224,T:248,tilt:120,L0:224,spin:-.4,color:'#c4a283',tex:'pluto',
+  lead:'Räknades som planet fram till 2006 och är nu en dvärgplanet. Den ljusa hjärtformade slätten består av kväveis.',
+  facts:[['Diameter','2 377 km'],['Avstånd till solen','4,4–7,4 mdr km'],['Ett år','248 år'],['En dag','6,4 dygn'],['Månar','5'],['Temperatur','ca −230 °C']],
+  fun:'Banan lutar 17 grader och är så avlång att Pluto ibland är närmare solen än Neptunus. Dra till sidovy så syns lutningen.',
+  url:'https://science.nasa.gov/dwarf-planets/pluto/',dwarf:1},
+ {id:'ceres',name:'Ceres',kind:'Dvärgplanet',Rkm:470,a:2.77,e:.0785,inc:10.6,node:80.3,peri:153.9,T:4.6,tilt:4,L0:95,spin:1.2,color:'#9a958d',tex:'ceres',dwarf:1,
+  lead:'Den enda dvärgplaneten i asteroidbältet, mellan Mars och Jupiter. Den är det största objektet där och står för ungefär en fjärdedel av bältets totala massa.',
+  facts:[['Diameter','ca 940 km'],['Avstånd till solen','ca 414 milj km'],['Ett år','4,6 år'],['En dag','ca 9 timmar'],['Månar','0'],['Temperatur','ca −105 °C']],
+  fun:'De ljusa fläckarna i kratern Occator är salt som läckt upp från saltvatten under ytan. Rymdsonden Dawn kretsade runt Ceres 2015–2018.',
+  url:'https://science.nasa.gov/dwarf-planets/ceres/'},
+ {id:'haumea',name:'Haumea',kind:'Dvärgplanet',Rkm:780,a:43.1,e:.195,inc:28.2,node:122.2,peri:1,T:284,tilt:0,L0:170,spin:3.2,color:'#e8e6e4',tex:'haumea',dwarf:1,shape:[1.35,.6,1.05],ring:{in:2.6,out:3.0,kind:'haumea'},
+  lead:'En avlång dvärgplanet långt ut i Kuiperbältet, formad ungefär som en tillplattad rugbyboll. Ytan är täckt av glänsande vattenis.',
+  facts:[['Storlek','ca 2 300 × 1 000 km'],['Avstånd till solen','5,2–7,7 mdr km'],['Ett år','ca 284 år'],['En dag','ca 3,9 timmar'],['Månar','2 (Hiʻiaka, Namaka)'],['Temperatur','ca −240 °C']],
+  fun:'Haumea snurrar ett varv på under fyra timmar, så snabbt att den dragits ut på längden. Den har också en ring, som upptäcktes 2017.',
+  url:'https://science.nasa.gov/dwarf-planets/haumea/'},
+ {id:'makemake',name:'Makemake',kind:'Dvärgplanet',Rkm:715,a:45.4,e:.16,inc:29,node:79.4,peri:16,T:306,tilt:0,L0:250,spin:.5,color:'#c2876a',tex:'makemake',dwarf:1,
+  lead:'En rödbrun dvärgplanet i Kuiperbältet. Färgen kommer från frusen metan som förändrats av solljus under mycket lång tid.',
+  facts:[['Diameter','ca 1 430 km'],['Avstånd till solen','5,7–7,9 mdr km'],['Ett år','ca 306 år'],['En dag','ca 23 timmar'],['Månar','1'],['Temperatur','ca −240 °C']],
+  fun:'Den upptäcktes strax efter påsk 2005 och fick namn efter en skapelsegud från Påskön.',
+  url:'https://science.nasa.gov/dwarf-planets/makemake/'},
+ {id:'eris',name:'Eris',kind:'Dvärgplanet',Rkm:1163,a:67.8,e:.44,inc:44,node:35.9,peri:187.5,T:559,tilt:0,L0:20,spin:.2,color:'#dcdad6',tex:'eris',dwarf:1,
+  lead:'Nästan exakt lika stor som Pluto men tyngre. Den har en väldigt avlång och lutande bana och är oftast mycket längre bort än Pluto.',
+  facts:[['Diameter','ca 2 330 km'],['Avstånd till solen','5,7–14,6 mdr km'],['Ett år','ca 559 år'],['En dag','ca 16 dygn'],['Månar','1 (Dysnomia)'],['Temperatur','ca −240 °C']],
+  fun:'Det var upptäckten av Eris 2005 som fick astronomerna att definiera vad en planet är. Resultatet blev att Pluto blev dvärgplanet 2006. Banan lutar hela 44 grader.',
+  url:'https://science.nasa.gov/dwarf-planets/eris/'}
+];
+
+const canvas=document.getElementById('scene');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(50,1,.02,3000);
+const HOME_POS=new THREE.Vector3(0,42,66),HOME_T=new THREE.Vector3(0,0,0);
+camera.position.copy(HOME_POS);
+const controls=new THREE.OrbitControls(camera,canvas);
+controls.enableDamping=true;controls.dampingFactor=.08;controls.screenSpacePanning=true;controls.maxDistance=280;controls.minDistance=1;controls.rotateSpeed=.7;
+
+scene.add(new THREE.AmbientLight(0xffffff,.13));
+const sunLight=new THREE.PointLight(0xfff4e0,1.5,0);scene.add(sunLight);
+
+{const n=3500,pos=new Float32Array(n*3),col=new Float32Array(n*3);
+ for(let i=0;i<n;i++){const u=rand()*2-1,t=rand()*TAU,r=900,s=Math.sqrt(1-u*u);pos.set([r*s*Math.cos(t),r*u,r*s*Math.sin(t)],i*3);const b=.5+rand()*.5,w=rand();col.set([b*(w>.8?1:.85),b*.9,b*(w<.2?1:.95)],i*3);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+ scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:1.6,sizeAttenuation:false,vertexColors:true})));}
+
+const distScale=a=>9*Math.sqrt(a);
+const visR=Rkm=>.35*Math.pow(Rkm/6371,.55);
+function orbitPos(b,th,out){
+  let r=b.a;if(b.e)r=b.a*(1-b.e*b.e)/(1+b.e*Math.cos(th-b.peri*rad));
+  const D=distScale(r),inc=(b.inc||0)*rad;
+  out.set(D*Math.cos(th),D*Math.sin(th-(b.node||0)*rad)*Math.sin(inc),-D*Math.sin(th));return out;}
+
+const texLoader=[];
+BODIES.forEach(b=>{
+  b.r=b.id==='sun'?3:Math.max(.13,visR(b.Rkm));
+  b.pivot=new THREE.Group();scene.add(b.pivot);
+  b.tiltG=new THREE.Group();b.tiltG.rotation.z=(b.tilt||0)*rad;b.pivot.add(b.tiltG);
+  const geo=new THREE.SphereGeometry(b.r,64,32);
+  b.mat=b.id==='sun'?new THREE.MeshBasicMaterial({color:b.color}):new THREE.MeshPhongMaterial({color:b.color,shininess:b.id==='earth'?22:4,specular:b.id==='earth'?0x445566:0x111111});
+  b.mesh=new THREE.Mesh(geo,b.mat);b.tiltG.add(b.mesh);
+  if(b.shape)b.mesh.scale.set(...b.shape);
+  if(b.ring){const inn=b.r*b.ring.in,out=b.r*b.ring.out,rg=new THREE.RingGeometry(inn,out,160,1);const p=rg.attributes.position,uv=rg.attributes.uv;
+    for(let i=0;i<p.count;i++){const rr=Math.hypot(p.getX(i),p.getY(i));uv.setXY(i,(rr-inn)/(out-inn),.5);}
+    const rt=new THREE.CanvasTexture(ringTex(b.ring.kind));
+    const rm=new THREE.Mesh(rg,new THREE.MeshPhongMaterial({map:rt,transparent:true,side:THREE.DoubleSide,depthWrite:false,shininess:0}));rm.rotation.x=-Math.PI/2;b.tiltG.add(rm);}
+  if(b.a){const pts=[],v=new THREE.Vector3();for(let k=0;k<=360;k++)pts.push(orbitPos(b,k/360*TAU,v).clone());
+    const lg=new THREE.BufferGeometry().setFromPoints(pts);scene.add(new THREE.Line(lg,new THREE.LineBasicMaterial({color:b.dwarf?0xb07a5a:0x5d6aa8,transparent:true,opacity:.38})));}
+  texLoader.push(b);
+});
+const sun=BODIES[0];
+{const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');const g=x.createRadialGradient(128,128,0,128,128,128);
+ g.addColorStop(0,'rgba(255,220,140,.95)');g.addColorStop(.25,'rgba(255,170,60,.45)');g.addColorStop(.6,'rgba(255,120,30,.1)');g.addColorStop(1,'rgba(255,100,0,0)');x.fillStyle=g;x.fillRect(0,0,256,256);
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));sp.scale.set(16,16,1);sun.pivot.add(sp);}
+const earth=BODIES.find(b=>b.id==='earth');
+earth.clouds=new THREE.Mesh(new THREE.SphereGeometry(earth.r*1.025,64,32),new THREE.MeshPhongMaterial({transparent:true,opacity:0,depthWrite:false}));earth.tiltG.add(earth.clouds);
+const moonPivot=new THREE.Group();earth.pivot.add(moonPivot);
+const moon=new THREE.Mesh(new THREE.SphereGeometry(earth.r*.27,32,16),new THREE.MeshPhongMaterial({color:0x9a9894,shininess:2}));moon.position.x=earth.r*2.6;moonPivot.add(moon);
+
+{const n=1600,pos=new Float32Array(n*3);for(let i=0;i<n;i++){const a=2.2+rand()*1.1,t=rand()*TAU,D=distScale(a);pos.set([D*Math.cos(t),(rand()-.5)*.6,D*Math.sin(t)],i*3);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+ var belt=new THREE.Points(g,new THREE.PointsMaterial({color:0x8d8a84,size:.09}));scene.add(belt);}
+
+const labelsEl=document.getElementById('labels');
+BODIES.forEach(b=>{const d=document.createElement('div');d.className='lbl';d.textContent=b.name;labelsEl.append(d);b.lbl=d;});
+
+const jobs=[['sun','Solen'],['earth','Jorden'],['earthSpec',null],['clouds',null],['jupiter','Jupiter'],['saturn','Saturnus'],['mars','Mars'],['venus','Venus'],['mercury','Merkurius'],['moon',null],['uranus','Uranus'],['neptune','Neptunus'],['pluto','Pluto'],['ceres','Ceres'],['haumea','Haumea'],['makemake','Makemake'],['eris','Eris']];
+const loadingEl=document.getElementById('loading');
+function tex(cv){const t=new THREE.CanvasTexture(cv);t.anisotropy=renderer.capabilities.getMaxAnisotropy();return t;}
+function runJobs(){
+  if(!jobs.length){loadingEl.style.opacity=0;return;}
+  const [k,label]=jobs.shift();if(label)loadingEl.textContent='Målar '+label+'…';
+  setTimeout(()=>{const cv=TEX[k]();
+    if(k==='earthSpec'){earth.mat.specularMap=tex(cv);earth.mat.specular.set(0x8899aa);earth.mat.needsUpdate=true;}
+    else if(k==='clouds'){earth.clouds.material.map=tex(cv);earth.clouds.material.opacity=.95;earth.clouds.material.needsUpdate=true;}
+    else if(k==='moon'){moon.material.map=tex(cv);moon.material.color.set(0xffffff);moon.material.needsUpdate=true;}
+    else{const b=BODIES.find(x=>x.tex===k);b.mat.map=tex(cv);b.mat.color.set(0xffffff);b.mat.needsUpdate=true;}
+    runJobs();},30);
+}
+
+const chipsEl=document.getElementById('chips'),cardEl=document.getElementById('card'),hintEl=document.getElementById('hint');
+BODIES.forEach(b=>{const c=document.createElement('button');c.className='chip';c.setAttribute('aria-pressed','false');
+  const dot=document.createElement('i');dot.style.background=b.color;c.append(dot,document.createTextNode(b.name));c.onclick=()=>focusOn(b);chipsEl.append(c);b.chip=c;});
+
+function renderCard(b){
+  cardEl.innerHTML='';
+  const k=document.createElement('p');k.className='kind';k.textContent=b.kind;
+  const h=document.createElement('h2');h.textContent=b.name;
+  const l=document.createElement('p');l.className='lead';l.textContent=b.lead;
+  const dl=document.createElement('dl');dl.className='facts';
+  b.facts.forEach(([t,v])=>{const d=document.createElement('div');const dt=document.createElement('dt');dt.textContent=t;const dd=document.createElement('dd');dd.textContent=v;d.append(dt,dd);dl.append(d);});
+  const f=document.createElement('p');f.className='fun';f.textContent=b.fun;
+  const act=document.createElement('div');act.className='actions';
+  const a=document.createElement('a');a.href=b.url;a.target='_blank';a.rel='noopener';a.textContent='Riktiga bilder hos NASA ↗';
+  const back=document.createElement('button');back.textContent='Hela solsystemet';back.onclick=overview;
+  act.append(a,back);cardEl.append(k,h,l,dl,f,act);cardEl.hidden=false;cardEl.scrollTop=0;
+}
+
+let focus=null,fly=null,cardOpen=false;
+const tmp=new THREE.Vector3(),tmp2=new THREE.Vector3();
+function worldPos(b,out){return b.pivot.getWorldPosition(out);}
+function focusOn(b){
+  focus=b;hideHint();
+  worldPos(b,tmp);const dir=camera.position.clone().sub(tmp).normalize();dir.y=Math.max(dir.y,.28);dir.normalize();
+  const dist=b.id==='sun'?b.r*6:b.r*(b.ring?7.5:5.5);
+  fly={t0:performance.now()/1000,dur:1.6,fromPos:camera.position.clone(),fromT:controls.target.clone(),dir,dist};
+  controls.minDistance=b.r*1.4;renderCard(b);cardOpen=true;resize();
+  BODIES.forEach(x=>x.chip.setAttribute('aria-pressed',x===b));
+  b.chip.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+}
+function overview(){
+  focus=null;fly={t0:performance.now()/1000,dur:1.6,fromPos:camera.position.clone(),fromT:controls.target.clone(),home:true};
+  controls.minDistance=1;cardEl.hidden=true;cardOpen=false;resize();
+  BODIES.forEach(x=>x.chip.setAttribute('aria-pressed','false'));
+}
+document.getElementById('home').onclick=overview;
+let hinted=true;function hideHint(){if(hinted){hinted=false;hintEl.style.opacity=0;setTimeout(()=>hintEl.hidden=true,700);}}
+
+let down=null;
+canvas.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,t:performance.now()};});
+canvas.addEventListener('pointerup',e=>{
+  if(!down)return;const moved=Math.hypot(e.clientX-down.x,e.clientY-down.y),dt=performance.now()-down.t;down=null;
+  if(moved>8||dt>500){hideHint();return;}
+  const W=canvas.clientWidth,H=canvas.clientHeight,f=H/2/Math.tan(camera.fov*rad/2);let best=null,score=1e9;
+  BODIES.forEach(b=>{worldPos(b,tmp);const d=tmp.distanceTo(camera.position);tmp2.copy(tmp).project(camera);if(tmp2.z>1)return;
+    const sx=(tmp2.x+1)/2*W,sy=(1-tmp2.y)/2*H,pr=b.r*f/d*(b.ring?1.6:1);const lim=Math.max(26,pr*1.15),dd=Math.hypot(sx-e.clientX,sy-e.clientY);
+    if(dd<lim&&dd/lim<score){score=dd/lim;best=b;}});
+  if(best)focusOn(best);
+});
+
+function resize(){
+  const W=window.innerWidth,H=window.innerHeight;renderer.setSize(W,H,false);camera.aspect=W/H;
+  if(cardOpen){const shift=Math.min(H*.22,cardEl.offsetHeight*.5+40);camera.setViewOffset(W,H,0,shift,W,H);}else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize',resize);resize();
+
+let simT=0,speed=0,paused=false,last=performance.now()/1000;
+const sp=document.getElementById('speed');const setSpeed=()=>{const v=+sp.value/100;speed=v*v*2.2;};sp.oninput=setSpeed;setSpeed();
+const pb=document.getElementById('pause');pb.onclick=()=>{paused=!paused;pb.textContent=paused?'▶':'⏸';pb.setAttribute('aria-label',paused?'Spela':'Pausa');};
+const ease=k=>k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;
+
+function frame(){
+  const now=performance.now()/1000,dt=Math.min(.05,now-last);last=now;
+  const tdt=paused?0:dt*speed;simT+=tdt;
+  BODIES.forEach(b=>{if(b.a)orbitPos(b,b.L0*rad+TAU*simT/b.T,b.pivot.position);b.mesh.rotation.y+=dt*(b.spin||.15)*.6;});
+  earth.clouds.rotation.y+=dt*.55;moonPivot.rotation.y+=tdt*TAU*13.4*.3+dt*.05;belt.rotation.y+=tdt*TAU/4.6;
+  if(fly){
+    const k=ease(clamp((now-fly.t0)/fly.dur));controls.enabled=false;
+    let tgt,pos;if(fly.home){tgt=HOME_T;pos=HOME_POS;}else{tgt=worldPos(focus,tmp).clone();pos=tgt.clone().addScaledVector(fly.dir,fly.dist);}
+    controls.target.lerpVectors(fly.fromT,tgt,k);camera.position.lerpVectors(fly.fromPos,pos,k);
+    if(k>=1){fly=null;controls.enabled=true;}
+  }else if(focus){worldPos(focus,tmp);tmp2.copy(tmp).sub(controls.target);camera.position.add(tmp2);controls.target.add(tmp2);}
+  controls.update();
+  renderer.render(scene,camera);
+  const W=canvas.clientWidth,H=canvas.clientHeight;
+  BODIES.forEach(b=>{worldPos(b,tmp);const d=tmp.distanceTo(camera.position);tmp2.copy(tmp).project(camera);
+    if(tmp2.z>1||tmp2.z<-1||(focus&&focus!==b&&d<focus.r*3)){b.lbl.style.display='none';return;}
+    const f=H/2/Math.tan(camera.fov*rad/2),pr=b.r*f/d;
+    b.lbl.style.display='';b.lbl.style.transform=`translate(-50%,0) translate(${((tmp2.x+1)/2*W).toFixed(1)}px,${((1-tmp2.y)/2*H+pr+6).toFixed(1)}px)`;
+    b.lbl.style.opacity=focus===b?0:1;});
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);runJobs();
+</script>
+<script>
+if('serviceWorker' in navigator){addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+</script>
+</body>
+</html>
